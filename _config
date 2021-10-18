@@ -1,0 +1,20 @@
+
+Target: aarch64-suse-linux-gnu
+
+Required: qemu-linux-user
+Required: qemu-tools
+Required: build-initvm-x86_64
+Required: gptfdisk
+Required: kpartx
+Required: dosfstools
+Required: python3-kiwi_crossprepare_plugin
+
+# only needed as workaround for chroot builds:
+#Required: kmod
+#Required: kernel-default
+
+#Required: cross-arm-linux-gnueabi-glibc
+#Required: cross-arm-linux-gnueabi-gcc
+#Required: cross-arm-linux-gnueabi-kernel-headers
+
+

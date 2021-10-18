@@ -1,0 +1,213 @@
+#!/bin/bash
+#
+# U-Boot injection script.
+#
+# This script installs U-Boot SPL, MLO, BL1, IMX, whatever images into
+# the target image during setup time as well as on first boot.
+#
+# It also serves as our generic hook into things we need to do to fix
+# up the build.
+
+set -x
+
+diskname=$1
+bootdev=$2
+p_number=${bootdev: -1}
+loopname="${bootdev%*p$p_number}"
+loopdev=/dev/${loopname#/dev/mapper/*}
+flavor=raspberrypi
+is_firstboot=
+
+pushd /usr/src/packages/KIWIROOT-oem/
+
+# The target system doesn't support GPT, so let's move it to
+# MBR partition layout instead.
+#
+# Also make sure to set the ESP partition to type 0xc so that
+# broken firmware (Rpi) detects it as FAT.
+
+# Use tabs, "<<-" strips tabs, but no other whitespace!
+cat > gdisk.tmp <<-'EOF'
+                x
+                r
+                g
+                t
+                1
+                c
+                w
+                y
+EOF
+losetup /dev/loop3 $diskname
+dd if=/dev/loop3 of=mbrid.bin bs=1 skip=440 count=4
+gdisk /dev/loop3 < gdisk.tmp
+dd of=/dev/loop3 if=mbrid.bin bs=1 seek=440 count=4
+rm -f mbrid.bin
+rm -f gdisk.tmp
+
+cat > fdisk.tmp <<-'EOF'
+  t
+  1
+  c
+  a
+  1
+  w
+EOF
+fdisk /dev/loop3 < fdisk.tmp
+losetup -d /dev/loop3
+
+
+#cat > gdisk.tmp <<-'EOF'
+#	t
+#	1
+#	0700
+#	c
+#	1
+#	vcboot
+#	x
+#	a
+#	1
+#	2
+#	64
+#	a
+#	2
+#	2
+#	64
+#	m
+#	w
+#EOF
+#==========================================
+# adjust Raspberry Pi partition table
+#------------------------------------------
+#echo -n > gdisk.tmp
+	# Set the name of the first partition to "vcboot" and mark
+	# the 1st and 2nd partitions as bootable (checked by RPi loader and U-Boot)
+#	cat >> gdisk.tmp <<-'EOF'
+#		c
+#		1
+#		vcboot
+#		x
+#		a
+#		1
+#		2
+#		64
+#		a
+#		2
+#		2
+#		64
+#		m
+#EOF
+
+# Convert GPT to hybrid GPT
+#cat >> gdisk.tmp <<-'EOF'
+#	x
+#	r
+#	h
+#	1 2
+#	n
+#	c
+#	n
+#	83
+#	y
+#	w
+#	y
+#EOF
+
+#gdisk /dev/mmcblk0 < gdisk.tmp
+#rm -f gdisk.tmp
+
+#==========================================
+# copy Raspberry Pi firmware to vfat partition
+#------------------------------------------
+if [ -f "boot/vc/bootcode.bin" ]; then
+	echo "Installing boot files for native bootloader"
+	LINE=$(kpartx -asv $diskname | head -n1)
+	PART=$(echo "$LINE" | awk '{print $3}')
+	mkfs.vfat /dev/mapper/$PART
+	mkdir -p ./mnt-pi
+	mount /dev/mapper/$PART ./mnt-pi
+	( cd boot/vc; tar c . ) | ( cd ./mnt-pi/; tar x )
+	# copy kernel and initrd
+	cp -v boot/Image-*-default ./mnt-pi/kernel.img
+	cp -v boot/initrd-*-default ./mnt-pi/initrd.img
+	( cd boot; tar c . ) | ( cd ./mnt-pi/; tar x )
+	cat >./mnt-pi/config.txt <<-EOF
+# Switch the CPU from ARMv7 into ARMv8 (aarch64) mode
+arm_64bit=1
+
+enable_uart=1
+uart_2ndstage=1
+upstream_kernel=1
+
+# This overlay fixes divergences between the RPi device tree and what
+# upstream provides
+dtoverlay=upstream
+
+# Disable bluetooth by default to have serial console working
+dtoverlay=disable-bt
+
+# Add minimal SMBIOS info
+dtoverlay=smbios
+dtoverlay=vc4-kms-v3d-pi4,cma-default
+dtoverlay=disable-v3d
+
+kernel=kernel.img
+initramfs initrd.img
+EOF
+	cat >./mnt-pi/cmdline.txt <<-EOF
+console=tty0 console=serial0,115200 video=efifb root=/dev/mmcblk1p2 rw elevator=deadline fsck.repair=yes net.ifnames=0 rootwait
+EOF
+        
+	umount ./mnt-pi
+	rmdir ./mnt-pi
+	# "kpartx -dv $diskname" does not work if $diskname
+	# is longer than 64 characters
+	LOOPDEV=$(echo "/dev/$PART" | sed 's/p[0-9][0-9]*$//')
+	kpartx -dv $LOOPDEV
+	losetup -d $LOOPDEV
+fi
+
+#==========================================
+# install DTBs on boot partition
+#------------------------------------------
+if [ -z "$is_firstboot" ]; then
+    if [ -e /usr/src/packages/KIWIROOT-oem/boot/dtb -a -n $bootdev ];then
+        echo "System uses device trees, installing to boot partition"
+        bootpart=$(echo $bootdev | sed 's/.*loop[0-9][0-9]*p/p/')
+        bootloop=$(kpartx -asv $diskname | awk '{print $3}' | grep "loop.*"$bootpart )
+        mkdir ./mnt-tmp
+        mount /dev/mapper/$bootloop ./mnt-tmp
+        # KIWI copies dtb on non-EFI systems; check and skip
+        if [ -e ./mnt-tmp/dtb ]; then
+            echo "DTBs already in place"
+        # In case bootdev and rootdev are the same, the dtbs will be already
+        # located in the rootdev below /boot/
+        elif [ ! \( -e ./mnt-tmp/boot -a -e ./mnt-tmp/boot/dtb \) ];then
+            cp -a /usr/src/packages/KIWIROOT-oem/boot/dtb* ./mnt-tmp/
+        fi
+        umount ./mnt-tmp
+        loop=$(echo "/dev/$bootloop" | sed 's/p[0-9][0-9]*$//')
+        kpartx -dv $loop
+        losetup -d $loop
+    fi
+fi
+
+#==========================================
+# Install boot.scr where needed
+#------------------------------------------
+if [ -e boot/boot.scr ]; then
+	# We need to use standalone u-boot, but kiwi only support EFI/Grub2
+	# So, use EFI layout for kiwi, but then copy boot.scr on partition #1 (EFI)
+	# to boot with standalone u-boot instead of bootefi (since some boards do not support it).
+	echo "Copy boot.scr on EFI boot partition"
+	# p1 is pseudo-EFI partition, p2 is rootfs (with boot/ folder)
+	BOOTPART=$(echo "$bootdev" | sed 's/p[0-9][0-9]*$/p1/')
+	mkdir ./mnt-boot
+	mount $BOOTPART ./mnt-boot
+
+	# Copy boot script
+	cp boot/boot.scr ./mnt-boot/
+
+	umount ./mnt-boot
+	rmdir ./mnt-boot
+fi
+

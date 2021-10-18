@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<image schemaversion="6.1" name="Geckito-openSUSE-Leap-15.3-raspberrypi" displayname="Geckito openSUSE Leap 15.3">
+  <description type="system">
+    <author>Adrian Schroeter</author>
+    <contact>adrian@suse.de</contact>
+    <specification>
+	    Minimalistic Raspberry Pi 4 Image based on openSUSE Leap 15.3 based on Geckito template.
+	    Unlike JeOS this image is not supposed to be updated by rpm/zypper, but to be rebuild instead.
+  </specification>
+  </description>
+  <!-- OBS-ExclusiveArch: aarch64 -->
+  <preferences>
+     <type image="oem" initrd_system="dracut" filesystem="ext4" fsmountoptions="noatime,nobarrier" editbootinstall="kernel-raspberrypi-install" kernelcmdline="loglevel=3" spare_part="200" spare_part_mountpoint="/boot/rpi/"  bootloader="custom">
+      <!-- gives 1GB raw image, it is used for 30-40% only though.
+           the filesystem will get increased matching the storage card on first boot. -->
+      <size unit="M">1024</size>
+      <oemconfig>
+        <oem-resize>true</oem-resize>
+        <oem-skip-verify>true</oem-skip-verify>
+      </oemconfig>
+    </type>
+    <version>2021.02.24</version>
+    <packagemanager>zypper</packagemanager>
+    <locale>en_US</locale>
+    <keytable>us.map.gz</keytable>
+    <timezone>Europe/Berlin</timezone>
+    <hwclock>utc</hwclock>
+    <rpm-excludedocs>true</rpm-excludedocs>
+    <bootloader-theme>openSUSE</bootloader-theme>
+    <bootsplash-theme>openSUSE</bootsplash-theme>
+  </preferences>
+  <users group="root">
+    <user password="$1$wYJUgpM5$RXMMeASDc035eX.NbYWFl0" home="/root" name="root"/>
+  </users>
+  <repository type="rpm-md">
+    <source path="http://download.opensuse.org/distribution/leap/15.3/repo/oss/"/>
+  </repository>
+  <packages type="bootstrap">
+
+    <package name="kernel-default" bootinclude="true"/>
+    <package name="raspberrypi-firmware" bootinclude="true"/>
+    <package name="raspberrypi-firmware-dt" bootinclude="true"/>
+<!--
+    <package name="raspberrypi-firmware-config" bootinclude="true"/>
+    <package name="u-boot-rpiarm64" bootinclude="true"/>
+    <package name="raspberrypi-eeprom"/>
+-->
+    <package name="bcm43xx-firmware"/>
+    <package name="glibc-locale"/>
+
+    <!-- for user network setup via /boot partition -->
+    <package name="geckito-setup"/>
+
+    <!-- for k3s and k3s.sh script -->
+    <package name="curl"/>
+    <package name="ca-certificates"/>
+    <package name="ca-certificates-mozilla"/>
+    <package name="openSUSE-build-key"/>
+    <package name="chrony"/>
+
+    <!-- RPi specials -->
+    <package name="dtc"/>
+    <package name="busybox"/>
+    <package name="filesystem"/>
+    <package name="gptfdisk" bootinclude="true"/>
+
+    <package name="kmod"/>
+    <package name="net-tools"/>
+    <package name="libudev1"/>
+    <package name="openSUSE-release"/>
+    <!-- Available only for Leap: <package name="openSUSE-release-appliance-custom"/> -->
+    <!-- Tumbleweed uses openSUSE-release-ftp -->
+    <package name="openSUSE-release-ftp"/>
+    <package name="pam"/>
+    <package name="shadow"/>
+    <package name="sysconfig"/>
+    <package name="sysconfig-netconfig"/>
+    <package name="system-group-hardware" bootinclude="true"/>
+    <package name="system-user-lp" bootinclude="true"/>
+    <package name="systemd"/>
+    <!-- avoid using systemd-mini -->
+    <package name="systemd-sysvinit"/>
+    <package name="systemd-logger"/>
+    <package name="timezone"/>
+    <package name="udev"/>
+    <package name="util-linux-systemd"/>
+    <package name="vim"/>
+    <package name="which"/>
+    <!-- JeOS: multiple choices -->
+    <package name="libgcc_s1"/>
+    <package name="libsystemd0"/>
+    <!-- avoid using libsystemd0-mini -->
+    <!--Do not install both wicked and Network Manager - boo#1141433-->
+    <package name="iproute2"/>
+    <package name="wicked"/>
+    <package name="wicked-service"/>
+  </packages>
+  <packages type="delete">
+    <package name="patterns-base-base"/>
+    <package name="zypper"/>
+    <package name="aaa_base-malloccheck"/>
+    <package name="purge-kernels-service"/>
+    <package name="glibc-locale"/>
+    <package name="rpm"/>
+    <package name="xfsprogs"/>
+    <package name="btrfsprogs"/>
+    <package name="cryptsetup"/>
+    <package name="libgpgme11"/>
+    <package name="libsqlite3"/>
+    <package name="libzypp"/>
+    <package name="btrfsprogs-udev-rules"/>
+    <package name="lvm2"/>
+    <package name="dialog"/>
+    <package name="libdialog14"/>
+    <package name="libyui-ncurses-pkg15"/>
+    <package name="gpg2"/>
+    <package name="mdadm"/>
+<!--
+    <package name="parted"/>
+    <package name="dracut-kiwi-lib"/>
+    <package name="dracut-kiwi-oem-repart"/>
+-->
+  </packages>
+  <packages type="image">
+    <package name="dracut-kiwi-oem-repart"/>
+  <!--
+    <package name="live-add-yast-repos"/>
+  -->
+  </packages>
+</image>
