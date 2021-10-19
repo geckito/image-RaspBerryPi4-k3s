@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!-- OBS-RemoteAsset: https://get.k3s.io/k3s.sh -->
+<!-- OBS-CopyToImage: k3s.sh /root/k3s.sh -->
+
 <image schemaversion="6.1" name="Geckito-openSUSE-Leap-15.3-raspberrypi" displayname="Geckito openSUSE Leap 15.3">
   <description type="system">
     <author>Adrian Schroeter</author>
